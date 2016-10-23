@@ -1,4 +1,4 @@
-/* radare - Copyright 2008-2014 - LGPL -- pancake */
+/* radare - Copyright 2008-2016 - LGPL -- pancake */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -11,6 +11,7 @@
 R_LIB_VERSION (r_syscall);
 
 extern RSyscallPort sysport_x86[];
+extern RSyscallPort sysport_avr[];
 
 R_API RSyscall* r_syscall_new() {
 	RSyscall *rs = R_NEW0 (RSyscall);
@@ -31,8 +32,9 @@ R_API void r_syscall_free(RSyscall *s) {
 
 /* return fastcall register argument 'idx' for a syscall with 'num' args */
 R_API const char *r_syscall_reg(RSyscall *s, int idx, int num) {
-	if (num<0 || num>=R_SYSCALL_ARGS || idx<0 || idx>=R_SYSCALL_ARGS)
+	if (num < 0 || num >= R_SYSCALL_ARGS || idx<0 || idx>=R_SYSCALL_ARGS) {
 		return NULL;
+	}
 	return s->regs[num].arg[idx];
 }
 
@@ -45,16 +47,19 @@ R_API int r_syscall_setup(RSyscall *s, const char *arch, const char *os, int bit
 	free (s->os);
 	s->os = strdup (os);
 
-	if (!strcmp (os, "any")) // ignored
+	if (!strcmp (os, "any")) { // ignored
 		return true;
-
-	if (!strcmp (arch, "mips"))
+	}
+	if (!strcmp (arch, "mips")) {
 		s->regs = fastcall_mips;
-	else if (!strcmp (arch,"sh"))
+	} else if (!strcmp (arch,"avr")) {
+		s->sysport = sysport_avr;
+	} else if (!strcmp (arch,"sh")) {
 		s->regs = fastcall_sh;
-	else if (!strcmp (arch, "arm"))
+	} else if (!strcmp (arch, "arm")) {
 		s->regs = fastcall_arm;
-	else if (!strcmp (arch, "x86")) {
+	} else if (!strcmp (arch, "x86")) {
+		s->sysport = sysport_x86;
 		switch (bits) {
 		case 8:
 			s->regs = fastcall_x86_8;
@@ -73,7 +78,7 @@ R_API int r_syscall_setup(RSyscall *s, const char *arch, const char *os, int bit
 		SYSCALLPATH, os, arch, bits);
 	if (!r_file_exists (file)) {
 		//eprintf ("r_syscall_setup: Cannot find '%s'\n", file);
-		return R_FALSE;
+		return false;
 	}
 
 	//eprintf ("DBG098: syscall->db must be reindexed for k\n");
@@ -99,7 +104,7 @@ R_API int r_syscall_setup_file(RSyscall *s, const char *path) {
 	if (s->fd)
 		fclose (s->fd);
 	s->fd = r_sandbox_fopen (path, "r");
-	if (s->fd == NULL)
+	if (!s->fd)
 		return false;
 	/* TODO: load info from file */
 	return true;
@@ -110,6 +115,7 @@ R_API RSyscallItem *r_syscall_item_new_from_string(const char *name, const char 
 	char *o;
 	if (!name || !s) return NULL;
 	si = R_NEW0 (RSyscallItem);
+	if (!si) return NULL;
 	o = strdup (s);
 	r_str_split (o, ',');
 	si->name = strdup (name);
@@ -131,8 +137,9 @@ R_API void r_syscall_item_free(RSyscallItem *si) {
 static int getswi(Sdb *p, int swi) {
 	if (p && swi == -1) {
 		swi = (int)sdb_array_get_num (p, "_", 0, NULL);
-		if (!swi)
+		if (!swi) {
 			swi = 0x80; // default hardcoded?
+		}
 	}
 	return swi;
 }
@@ -140,15 +147,17 @@ static int getswi(Sdb *p, int swi) {
 R_API RSyscallItem *r_syscall_get(RSyscall *s, int num, int swi) {
 	const char *ret, *ret2, *key;
 	RSyscallItem *si;
-	if (!s || !s->db)
+	if (!s || !s->db) {
+		eprintf ("Syscall database not loaded\n");
 		return NULL;
+	}
 	swi = getswi (s->db, swi);
 	key = sdb_fmt (0, "0x%02x.%d", swi, num);
 	ret = sdb_const_get (s->db, key, 0);
-	if (ret == NULL)
+	if (!ret)
 		return NULL;
 	ret2 = sdb_const_get (s->db, ret, 0);
-	if (ret2 == NULL) {
+	if (!ret2) {
 		return NULL;
 	}
 	si = r_syscall_item_new_from_string (ret, ret2);
@@ -156,34 +165,27 @@ R_API RSyscallItem *r_syscall_get(RSyscall *s, int num, int swi) {
 }
 
 R_API int r_syscall_get_num(RSyscall *s, const char *str) {
-	if (!s || !s->db)
+	if (!s || !s->db) {
 		return -1;
+	}
 	return (int)sdb_array_get_num (s->db, str, 1, NULL);
 }
 
 R_API const char *r_syscall_get_i(RSyscall *s, int num, int swi) {
 	char foo[32];
-	if (!s || !s->db)
+	if (!s || !s->db) {
 		return NULL;
+	}
 	swi = getswi (s->db, swi);
 	snprintf (foo, sizeof (foo), "0x%x.%d", swi, num);
 	return sdb_const_get (s->db, foo, 0);
-}
-
-R_API const char *r_syscall_get_io(RSyscall *s, int ioport) {
-	int i;
-	if (!s) return NULL;
-	for (i=0; s->sysport[i].name; i++) {
-		if (ioport == s->sysport[i].port)
-			return s->sysport[i].name;
-	}
-	return NULL;
 }
 
 static int callback_list(void *u, const char *k, const char *v) {
 	RList *list = (RList*)u;
 	if (!strchr (k, '.')) {
 		RSyscallItem *si = r_syscall_item_new_from_string (k, v);
+		if (!si) return 0;
 		if (!strchr (si->name, '.'))
 			r_list_append (list, si);
 	}
@@ -199,3 +201,15 @@ R_API RList *r_syscall_list(RSyscall *s) {
 	sdb_foreach (s->db, callback_list, list);
 	return list;
 }
+
+/* io */
+R_API const char *r_syscall_get_io(RSyscall *s, int ioport) {
+	int i;
+	if (!s) return NULL;
+	for (i=0; s->sysport[i].name; i++) {
+		if (ioport == s->sysport[i].port)
+			return s->sysport[i].name;
+	}
+	return NULL;
+}
+

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2011-2015 - pancake */
+/* radare - LGPL - Copyright 2011-2016 - pancake */
 
 #include <r_bin.h>
 #include <cxx/demangle.h>
@@ -109,8 +109,9 @@ R_API char *r_bin_demangle_msvc(const char *str) {
 	SDemangler *mangler = 0;
 
 	create_demangler (&mangler);
+	if (!mangler) return NULL;
 	if (init_demangler (mangler, (char *)str) == eDemanglerErrOK) {
-		mangler->demangle(mangler, &out/*demangled_name*/);
+		mangler->demangle (mangler, &out/*demangled_name*/);
 	}
 	free_demangler (mangler);
 	return out;
@@ -223,7 +224,7 @@ R_API char *r_bin_demangle_objc(RBinFile *binfile, const char *sym) {
 			}
 		}
 	}
-	if (sym[0] == '_' && sym[2] == '_') { // gnu style
+	if (sym[0] == '_' && sym[1] && sym[2] == '_') { // gnu style
 		free (clas);
 		clas = strdup (sym + 3);
 		args = strstr (clas, "__");
@@ -294,7 +295,7 @@ R_API int r_bin_demangle_type (const char *str) {
 	return R_BIN_NM_NONE;
 }
 
-R_API int r_bin_lang_rust(RBinFile *binfile) {
+R_API bool r_bin_lang_rust(RBinFile *binfile) {
 	RBinObject *o = binfile ? binfile->o : NULL;
 	RBinInfo *info = o ? o->info : NULL;
 	RBinSymbol *sym;
@@ -343,16 +344,27 @@ R_API int r_bin_lang_type(RBinFile *binfile, const char *def, const char *sym) {
 	return type;
 }
 
-R_API char *r_bin_demangle (RBinFile *binfile, const char *def, const char *str) {
+R_API char *r_bin_demangle(RBinFile *binfile, const char *def, const char *str) {
 	int type = -1;
-	RBin *bin = binfile->rbin;
-	if (!strncmp (str, "imp.", 4)) {
+	RBin *bin;
+	if (!binfile || !str || !*str) return NULL;
+
+	bin = binfile->rbin;
+	if (!strncmp (str, "sym.", 4))
 		str += 4;
-	}
+	if (!strncmp (str, "imp.", 4))
+		str += 4;
 	if (!strncmp (str, "__", 2)) {
-		type = R_BIN_NM_CXX;
-		str++;
+		if (str[2] == 'T') {
+			type = R_BIN_NM_SWIFT;
+		} else {
+			type = R_BIN_NM_CXX;
+		//	str++;
+		}
 	}
+	// if str is sym. or imp. when str+=4 str points to the end so just return
+	if (!*str)
+		return NULL;
 	if (type == -1) {
 		type = r_bin_lang_type (binfile, def, str);
 	}
@@ -360,9 +372,9 @@ R_API char *r_bin_demangle (RBinFile *binfile, const char *def, const char *str)
 	case R_BIN_NM_JAVA: return r_bin_demangle_java (str);
 	/* rust uses the same mangling as c++ and appends a uniqueid */
 	case R_BIN_NM_RUST: return r_bin_demangle_cxx (str);
-	case R_BIN_NM_CXX: return r_bin_demangle_cxx (str);
 	case R_BIN_NM_OBJC: return r_bin_demangle_objc (NULL, str);
-	case R_BIN_NM_SWIFT: return r_bin_demangle_swift (str);
+	case R_BIN_NM_SWIFT: return r_bin_demangle_swift (str, bin->demanglercmd);
+	case R_BIN_NM_CXX: return r_bin_demangle_cxx (str);
 	case R_BIN_NM_DLANG: return r_bin_demangle_plugin (bin, "dlang", str);
 	}
 	return NULL;

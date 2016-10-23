@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2015 - pancake */
+/* radare - LGPL - Copyright 2009-2016 - pancake */
 
 #include <r_cmd.h>
 #include <r_util.h>
@@ -21,10 +21,13 @@ R_API void r_cmd_alias_init(RCmd *cmd) {
 R_API RCmd *r_cmd_new () {
 	int i;
 	RCmd *cmd = R_NEW0 (RCmd);
-	if (!cmd) return cmd;
+	if (!cmd) {
+		return cmd;
+	}
 	cmd->lcmds = r_list_new ();
-	for (i=0;i<NCMDS;i++)
+	for (i = 0; i < NCMDS; i++) {
 		cmd->cmds[i] = NULL;
+	}
 	cmd->nullcallback = cmd->data = NULL;
 	r_core_plugin_init (cmd);
 	r_cmd_macro_init (&cmd->macro);
@@ -111,7 +114,7 @@ R_API int r_cmd_alias_set (RCmd *cmd, const char *k, const char *v, int remote) 
 	cmd->aliases.remote = (int *)realloc (cmd->aliases.remote,
 		sizeof (int*)*cmd->aliases.count);
 	cmd->aliases.values = (char **)realloc (cmd->aliases.values,
-		sizeof (char**)*cmd->aliases.count);
+		sizeof (char*)*cmd->aliases.count);
 	cmd->aliases.keys[i] = strdup (k);
 	cmd->aliases.values[i] = strdup (v);
 	cmd->aliases.remote[i] = remote;
@@ -144,7 +147,7 @@ R_API int r_cmd_set_data(RCmd *cmd, void *data) {
 
 R_API int r_cmd_add_long(RCmd *cmd, const char *lcmd, const char *scmd, const char *desc) {
 	RCmdLongItem *item = R_NEW (RCmdLongItem);
-	if (item == NULL)
+	if (!item)
 		return false;
 	strncpy (item->cmd, lcmd, sizeof (item->cmd)-1);
 	strncpy (item->cmd_short, scmd, sizeof (item->cmd_short)-1);
@@ -162,7 +165,7 @@ R_API int r_cmd_add(RCmd *c, const char *cmd, const char *desc, r_cmd_callback(c
 	int idx = (ut8)cmd[0];
 
 	item = c->cmds[idx];
-	if (item == NULL) {
+	if (!item) {
 		item = R_NEW (RCmdItem);
 		c->cmds[idx] = item;
 	}
@@ -226,7 +229,7 @@ R_API int r_cmd_call_long(RCmd *cmd, const char *input) {
 			int linp = strlen (input+c->cmd_len);
 			/// SLOW malloc on most situations. use stack
 			inp = malloc (lcmd+linp+2); // TODO: use static buffer with R_CMD_MAXLEN
-			if (inp == NULL)
+			if (!inp)
 				return -1;
 			memcpy (inp, c->cmd_short, lcmd);
 			memcpy (inp+lcmd, input+c->cmd_len, linp+1);
@@ -276,7 +279,7 @@ R_API int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 	}
 
 	name = strdup (oname);
-	if (name == NULL) {
+	if (!name) {
 		perror ("strdup");
 		return 0;
 	}
@@ -316,7 +319,7 @@ R_API int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 	}
 	if (ptr)
 		*ptr = ' ';
-	if (macro == NULL) {
+	if (!macro) {
 		macro = (struct r_cmd_macro_item_t *)malloc (
 			sizeof (struct r_cmd_macro_item_t));
 		macro->name = strdup (name);
@@ -326,7 +329,7 @@ R_API int r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 	macro->code = (char *)malloc (macro->codelen);
 	*macro->code = '\0';
 	macro->nargs = 0;
-	if (args == NULL)
+	if (!args)
 		args = "";
 	macro->args = strdup (args);
 	ptr = strchr (macro->name, ' ');
@@ -391,6 +394,7 @@ R_API int r_cmd_macro_rm(RCmdMacro *mac, const char *_name) {
 	RListIter *iter;
 	RCmdMacroItem *m;
 	char *name = strdup (_name);
+	if (!name) return false;
 	char *ptr = strchr (name, ')');
 	if (ptr) *ptr = '\0';
 	r_list_foreach (mac->macros, iter, m) {
@@ -424,6 +428,23 @@ R_API void r_cmd_macro_list(RCmdMacro *mac) {
 		idx++;
 	}
 }
+
+// TODO: use mac->cb_printf which is r_cons_printf at the end
+R_API void r_cmd_macro_meta(RCmdMacro *mac) {
+	RCmdMacroItem *m;
+	int j;
+	RListIter *iter;
+	r_list_foreach (mac->macros, iter, m) {
+		mac->cb_printf ("(%s %s, ", m->name, m->args);
+		for (j=0; m->code[j]; j++) {
+			if (m->code[j]=='\n')
+				mac->cb_printf (", ");
+			else mac->cb_printf ("%c", m->code[j]);
+		}
+		mac->cb_printf (")\n");
+	}
+}
+
 #if 0
 (define name value
   f $0 @ $1)
@@ -561,12 +582,12 @@ R_API int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
 	struct r_cmd_macro_label_t labels[MACRO_LABELS];
 
 	str = strdup (name);
-	if (str == NULL) {
+	if (!str) {
 		perror ("strdup");
 		return false;
 	}
 	ptr = strchr (str, ')');
-	if (ptr == NULL) {
+	if (!ptr) {
 		eprintf ("Missing end ')' parenthesis.\n");
 		free (str);
 		return false;
@@ -617,7 +638,7 @@ R_API int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
 
 				/* Label handling */
 				ptr2 = r_cmd_macro_label_process (mac, &(labels[0]), &labels_n, ptr);
-				if (ptr2 == NULL) {
+				if (!ptr2) {
 					eprintf ("Oops. invalid label name\n");
 					break;
 				} else

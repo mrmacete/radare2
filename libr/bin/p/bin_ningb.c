@@ -7,9 +7,6 @@
 #include <string.h>
 #include "../format/nin/nin.h"
 
-static int check(RBinFile *arch);
-static int check_bytes(const ut8 *buf, ut64 length);
-
 static Sdb* get_sdb (RBinObject *o) {
 	if (!o) return NULL;
 	//struct r_bin_[NAME]_obj_t *bin = (struct r_bin_r_bin_[NAME]_obj_t *) o->bin_obj;
@@ -21,18 +18,18 @@ static void * load_bytes(RBinFile *arch, const ut8 *buf, ut64 sz, ut64 loadaddr,
 	return R_NOTNULL;
 }
 
-static int check(RBinFile *arch) {
-	const ut8 *bytes = arch ? r_buf_buffer (arch->buf) : NULL;
-	ut64 sz = arch ? r_buf_size (arch->buf): 0;
-	return check_bytes (bytes, sz);
-}
-
 static int check_bytes(const ut8 *buf, ut64 length) {
 	ut8 lict[48];
 	if (!buf || length < (0x104+48))
 		return 0;
 	memcpy (lict, buf + 0x104, 48);
 	return (!memcmp (lict, lic, 48))? 1: 0;
+}
+
+static int check(RBinFile *arch) {
+	const ut8 *bytes = arch ? r_buf_buffer (arch->buf) : NULL;
+	ut64 sz = arch ? r_buf_size (arch->buf): 0;
+	return check_bytes (bytes, sz);
 }
 
 static int load(RBinFile *arch) {
@@ -114,6 +111,7 @@ static RList* sections(RBinFile *arch){
 	rombank[0]->vsize = 0x4000;
 	rombank[0]->vaddr = 0;
 	rombank[0]->srwx = r_str_rwx ("mrx");
+	rombank[0]->add = true;
 
 	r_list_append (ret, rombank[0]);
 
@@ -124,6 +122,7 @@ static RList* sections(RBinFile *arch){
 		rombank[i]->vaddr = i*0x10000-0xc000;			//spaaaaaaaaaaaaaaaace!!!
 		rombank[i]->size = rombank[i]->vsize = 0x4000;
 		rombank[i]->srwx = r_str_rwx ("mrx");
+		rombank[i]->add = true;
 		r_list_append (ret,rombank[i]);
 	}
 	return ret;
@@ -142,7 +141,7 @@ static RList* symbols(RBinFile *arch) {
 			ret->free (ret);
 			return NULL;
 		}
-		snprintf (ptr[i]->name, R_BIN_SIZEOF_STRINGS, "rst_%i", i*8);
+		ptr[i]->name = r_str_newf ("rst_%i", i*8);
 		ptr[i]->paddr = ptr[i]->vaddr = i*8;
 		ptr[i]->size = 1;
 		ptr[i]->ordinal = i;
@@ -152,7 +151,7 @@ static RList* symbols(RBinFile *arch) {
 	if (!(ptr[8] = R_NEW0 (RBinSymbol)))
 		return ret;
 
-	strncpy (ptr[8]->name, "Interrupt_Vblank", R_BIN_SIZEOF_STRINGS);
+	ptr[8]->name = strdup ("Interrupt_Vblank");
 	ptr[8]->paddr = ptr[8]->vaddr = 64;
 	ptr[8]->size = 1;
 	ptr[8]->ordinal = 8;
@@ -161,7 +160,7 @@ static RList* symbols(RBinFile *arch) {
 	if (!(ptr[9] = R_NEW0 (RBinSymbol)))
 		return ret;
 
-	strncpy (ptr[9]->name, "Interrupt_LCDC-Status", R_BIN_SIZEOF_STRINGS);
+	ptr[9]->name = strdup ("Interrupt_LCDC-Status");
 	ptr[9]->paddr = ptr[9]->vaddr = 72;
 	ptr[9]->size = 1;
 	ptr[9]->ordinal = 9;
@@ -170,7 +169,7 @@ static RList* symbols(RBinFile *arch) {
 	if (!(ptr[10] = R_NEW0 (RBinSymbol)))
 		return ret;
 
-	strncpy(ptr[10]->name, "Interrupt_Timer-Overflow", R_BIN_SIZEOF_STRINGS);
+	ptr[10]->name = strdup ("Interrupt_Timer-Overflow");
 	ptr[10]->paddr = ptr[10]->vaddr = 80;
 	ptr[10]->size = 1;
 	ptr[10]->ordinal = 10;
@@ -179,7 +178,7 @@ static RList* symbols(RBinFile *arch) {
 	if (!(ptr[11] = R_NEW0 (RBinSymbol)))
 		return ret;
 
-	strncpy(ptr[11]->name, "Interrupt_Serial-Transfere", R_BIN_SIZEOF_STRINGS);
+	ptr[11]->name = strdup ("Interrupt_Serial-Transfere");
 	ptr[11]->paddr = ptr[11]->vaddr = 88;
 	ptr[11]->size = 1;
 	ptr[11]->ordinal = 11;
@@ -188,7 +187,7 @@ static RList* symbols(RBinFile *arch) {
 	if (!(ptr[12] = R_NEW0 (RBinSymbol)))
 		return ret;
 
-	strncpy (ptr[12]->name, "Interrupt_Joypad", R_BIN_SIZEOF_STRINGS);
+	ptr[12]->name = strdup ("Interrupt_Joypad");
 	ptr[12]->paddr = ptr[12]->vaddr = 96;
 	ptr[12]->size = 1;
 	ptr[12]->ordinal = 12;
@@ -200,26 +199,21 @@ static RList* symbols(RBinFile *arch) {
 static RBinInfo* info(RBinFile *arch) {
 	ut8 rom_header[76];
 	RBinInfo *ret = R_NEW0 (RBinInfo);
-
-	if (!ret)
-		return NULL;
-
-	if (!arch || !arch->buf) {
+	if (!ret || !arch || !arch->buf) {
 		free (ret);
 		return NULL;
 	}
-
 	r_buf_read_at (arch->buf, 0x104, rom_header, 76);
 	ret->file = calloc (1, 17);
 	strncpy (ret->file, (const char*)&rom_header[48], 16);
 	ret->type = malloc (128);
 	ret->type[0] = 0;
 	gb_get_gbtype (ret->type, rom_header[66], rom_header[63]);
-	gb_add_cardtype (ret->type, rom_header[67]);			// XXX
+	gb_add_cardtype (ret->type, rom_header[67]); // XXX
 	ret->machine = strdup ("Gameboy");
 	ret->os = strdup ("any");
 	ret->arch = strdup ("gb");
-	ret->has_va = 1;
+	ret->has_va = true;
 	ret->bits = 16;
 	ret->big_endian = 0;
 	ret->dbg_info = 0;

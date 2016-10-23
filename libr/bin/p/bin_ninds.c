@@ -1,4 +1,4 @@
-/* radare - LGPL - 2014 - a0rtega */
+/* radare - LGPL - 2015 - a0rtega */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -77,6 +77,7 @@ static RList* sections(RBinFile *arch) {
 	ptr9->paddr = loaded_header.arm9_rom_offset;
 	ptr9->vaddr = loaded_header.arm9_ram_address;
 	ptr9->srwx = r_str_rwx ("mrwx");
+	ptr9->add = true;
 	r_list_append (ret, ptr9);
 
 	strncpy (ptr7->name, "arm7", 5);
@@ -85,6 +86,7 @@ static RList* sections(RBinFile *arch) {
 	ptr7->paddr = loaded_header.arm7_rom_offset;
 	ptr7->vaddr = loaded_header.arm7_ram_address;
 	ptr7->srwx = r_str_rwx ("mrwx");
+	ptr7->add = true;
 	r_list_append (ret, ptr7);
 
 	return ret;
@@ -150,9 +152,6 @@ struct r_bin_plugin_t r_bin_plugin_ninds = {
 	.name = "ninds",
 	.desc = "Nintendo DS format r_bin plugin",
 	.license = "LGPL3",
-	.init = NULL,
-	.fini = NULL,
-	.get_sdb = NULL,
 	.load = &load,
 	.load_bytes = &load_bytes,
 	.destroy = &destroy,
@@ -160,18 +159,9 @@ struct r_bin_plugin_t r_bin_plugin_ninds = {
 	.check_bytes = &check_bytes,
 	.baddr = &baddr,
 	.boffset = &boffset,
-	.binsym = NULL,
 	.entries = &entries,
 	.sections = &sections,
-	.symbols = NULL,
-	.imports = NULL,
-	.strings = NULL,
 	.info = &info,
-	.fields = NULL,
-	.libs = NULL,
-	.relocs = NULL,
-	.create = NULL,
-	.write = NULL,
 };
 
 #ifndef CORELIB

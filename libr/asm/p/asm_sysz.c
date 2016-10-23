@@ -8,7 +8,7 @@
 
 static csh cd = 0;
 
-static _Bool the_end(void *p) {
+static bool the_end(void *p) {
 	if (cd) {
 		cs_close (&cd);
 		cd = 0;
@@ -57,10 +57,9 @@ RAsmPlugin r_asm_plugin_sysz = {
 	.license = "BSD",
 	.arch = "sysz",
 	.bits = 32,
-	.init = NULL,
+	.endian = R_SYS_ENDIAN_BIG,
 	.fini = the_end,
 	.disassemble = &disassemble,
-	.assemble = NULL
 };
 
 #ifndef CORELIB

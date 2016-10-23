@@ -10,7 +10,7 @@ static csh cd = 0;
 static int n = 0;
 static cs_insn *insn = NULL;
 
-static _Bool the_end(void *p) {
+static bool the_end(void *p) {
 #if !USE_ITER_API
 	if (insn) {
 		cs_free (insn, n);
@@ -62,7 +62,7 @@ static int disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 #if USE_ITER_API
 	{
 		size_t size = len;
-		if (insn == NULL)
+		if (!insn)
 			insn = cs_malloc (cd);
 		insn->size = 1;
 		memset (insn, 0, insn->size);
@@ -111,10 +111,9 @@ RAsmPlugin r_asm_plugin_x86_cs = {
 	.license = "BSD",
 	.arch = "x86",
 	.bits = 16|32|64,
-	.init = NULL,
+	.endian = R_SYS_ENDIAN_LITTLE,
 	.fini = the_end,
 	.disassemble = &disassemble,
-	.assemble = NULL,
 	.features = "vm,3dnow,aes,adx,avx,avx2,avx512,bmi,bmi2,cmov,"
 		"f16c,fma,fma4,fsgsbase,hle,mmx,rtm,sha,sse1,sse2,"
 		"sse3,sse41,sse42,sse4a,ssse3,pclmul,xop"
@@ -123,17 +122,24 @@ RAsmPlugin r_asm_plugin_x86_cs = {
 static int check_features(RAsm *a, cs_insn *insn) {
 	const char *name;
 	int i;
-	if (!insn || !insn->detail)
+	if (!insn || !insn->detail) {
 		return 1;
-	for (i=0; i< insn->detail->groups_count; i++) {
+	}
+	for (i = 0; i < insn->detail->groups_count; i++) {
 		int id = insn->detail->groups[i];
-		if (id<128) continue;
-		if (id == X86_GRP_MODE32)
+		if (id < 128) {
 			continue;
-		if (id == X86_GRP_MODE64)
+		}
+		if (id == X86_GRP_MODE32) {
 			continue;
+		}
+		if (id == X86_GRP_MODE64) {
+			continue;
+		}
 		name = cs_group_name (cd, id);
-		if (!name) return 1;
+		if (!name) {
+			return 1;
+		}
 		if (!strstr (a->features, name)) {
 			return 0;
 		}
@@ -142,7 +148,7 @@ static int check_features(RAsm *a, cs_insn *insn) {
 }
 
 #ifndef CORELIB
-struct r_lib_struct_t radare_plugin = {
+RLibStruct radare_plugin = {
 	.type = R_LIB_TYPE_ASM,
 	.data = &r_asm_plugin_x86_cs,
 	.version = R2_VERSION

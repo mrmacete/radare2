@@ -5,6 +5,37 @@ F+= linux-x86-64
 F+= darwin-x86-64
 F+= windows-x86-32
 F+= windows-x86-64
+F+= types
+F+= types-16
+F+= types-32
+F+= types-64
+F+= types-x86-32
+F+= types-x86-64
+F+= types-windows
+F+= types-x86-windows-32
+F+= types-x86-windows-64
+F+= types-linux
+F+= types-x86-linux-32
+F+= types-x86-linux-64
+F+= types-x86-osx-64
+F+= types-arm-linux-32
+F+= types-arm-linux-64
+F+= types-arm-32
+F+= types-arm-64
+F+= types-riscv-64
+F+= types-riscv-linux-64
+F+= cc-x86-64
+F+= cc-x86-32
+F+= cc-mips-32
+F+= cc-m68k-32
+F+= cc-sparc-32
+F+= cc-arm-64
+F+= cc-arm-32
+F+= cc-avr-8
+F+= cc-powerpc-32
+F+= cc-powerpc-64
+F+= cc-xtensa-32
+F+= cc-riscv-64
 
 include $(TOP)/config-user.mk
 HOST_CC?=gcc
@@ -28,7 +59,7 @@ linux-x86-32.sdb: linux-x86-32
 
 %.sdb:%
 ifneq ($(SILENT),)
-	@echo "SDB $<"
+	@echo SDB $<
 	@rm -f $<.sdb
 	@cat $< | ${SDB} $<.sdb =
 	@test -f $<.sdb

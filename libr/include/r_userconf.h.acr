@@ -3,12 +3,6 @@
 
 #include "r_version.h"
 
-#ifdef LIL_ENDIAN
-#undef LIL_ENDIAN
-#endif
-#define LIL_ENDIAN @LIL_ENDIAN@
-#define CPU_ENDIAN @BIG_ENDIAN@
-
 #define DEBUGGER @DEBUGGER@
 
 #if __WIN32__ || __CYGWIN__ || MINGW32
@@ -29,14 +23,11 @@
 #ifndef HAVE_LIB_SSL
 #define HAVE_LIB_SSL @HAVE_OPENSSL@
 #endif
-#ifndef HAVE_LIB_EWF
-#define HAVE_LIB_EWF @HAVE_LIB_EWF@
-#endif
 
 #define HAVE_FORK @HAVE_FORK@
 
 #define WITH_GPL @WITH_GPL@
 
-#define R2_WWWROOT R2_DATDIR"/radare2/"R2_VERSION"/www"
+#define R2_WWWROOT R2_DATDIR "/radare2/" R2_VERSION "/www"
 
 #endif

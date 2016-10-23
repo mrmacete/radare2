@@ -94,14 +94,13 @@ static ut32 get_ins_bits(ut32 hash_code, ut32 ins_pos, st8 *ins,
 	return res;
 }
 
-static boolt check_arg(ut32 ins_bits, int *err_code)
-{
-	boolt res = 0;
+static bool check_arg(ut32 ins_bits, int *err_code) {
+	bool res = false;
 
 	if ((ins_bits <= 31) | (ins_bits >= 128 && ins_bits < 160)) {
-		res = 1;
+		res = true;
 	} else if (ins_bits >= 32 && ins_bits <= 252) {
-		res = 0;
+		res = false;
 	} else {
 		fprintf(stderr, "Invalid arg: %u\n", ins_bits);
 		*err_code = -1;
@@ -233,7 +232,7 @@ static st8 *decode_ins(st32 hash_code, ut32 ins_pos, ut32 ins_off, ut32 *ins_len
 	ins_len = get_ins_len(get_ins_part(ins_pos + ins_off, 1));
 	// get pseudo instruction
 	ins = ins_str[1 + 2 + hash_code * 4];
-	if (ins == NULL /*|| ins_str[4 * hash_code] == 0*/) {
+	if (!ins /*|| ins_str[4 * hash_code] == 0*/) {
 		fprintf(stderr, "Invalid instruction %s /hash %x\n", ins, hash_code);
 		*err_code = -1;
 		return NULL;
@@ -257,7 +256,7 @@ static st8 *decode_ins(st32 hash_code, ut32 ins_pos, ut32 ins_off, ut32 *ins_len
 		if (*pos == '`') {
 			pos++;
 			aux = strchr(pos, '`');
-			if (aux == NULL || pos == aux) {
+			if (!aux || pos == aux) {
 				fprintf(stderr, "Invalid instruction %s\n", ins);
 				free (res_decode);
 				*err_code = -1;
@@ -313,9 +312,9 @@ static st8 *decode_ins(st32 hash_code, ut32 ins_pos, ut32 ins_off, ut32 *ins_len
 	return res_decode;
 }
 
-static boolt is_hash(st32 hash_code)
+static bool is_hash(st32 hash_code)
 {
-	boolt ret;
+	bool ret;
 
 	switch(hash_code) {
 		case 0xE8:
@@ -444,8 +443,7 @@ static st8 *do_decode(ut32 ins_off, ut32 ins_pos, ut32 two_ins, ut32 *next_ins_p
 	return ins_res;
 }
 
-st8 *c55plus_decode(ut32 ins_pos, ut32 *next_ins_pos)
-{
+st8 *c55plus_decode(ut32 ins_pos, ut32 *next_ins_pos) {
 	ut8 opcode, two_ins = 0;
 	ut32 next_ins1_pos, next_ins2_pos;
 	st32 hash_code;
@@ -511,14 +509,11 @@ st8 *c55plus_decode(ut32 ins_pos, ut32 *next_ins_pos)
 	return ins_res;
 }
 
-static boolt is_linear_circular(ut32 ins_bits)
-{
+static bool is_linear_circular(ut32 ins_bits) {
 	ut8 op, op2, op3;
-
 	op = (ins_bits >> 6) | 16 * (ins_bits & 3);
 	op2 = (ins_bits >> 2) & 0xF;
 	op3 = op2 & 0xF;
-
 	return (op == 26 || op == 30 || (op3 > 7 && op3 != 15));
 }
 
@@ -556,7 +551,7 @@ static st8* get_token_decoded(st32 hash_code, st8 *ins_token, ut32 ins_token_len
 	case 63:
 	case 64:
 	case 65:
-		if (reg_arg == NULL || *reg_arg == '\0') {
+		if (!reg_arg || *reg_arg == '\0') {
 			res = strdup("<register>");
 			goto ret_decode;
 		}
@@ -696,7 +691,7 @@ static st8* get_token_decoded(st32 hash_code, st8 *ins_token, ut32 ins_token_len
 		break;
 	case 79:
 		res = get_trans_reg(ins_bits);
-		if (res == NULL) {
+		if (!res) {
 			*err_code = -1;
 		}
 		break;
@@ -707,7 +702,7 @@ static st8* get_token_decoded(st32 hash_code, st8 *ins_token, ut32 ins_token_len
 			} else if (*reg_arg == '2')
 				res = get_tc2_tc1(ins_bits & 1);
 		} else res = get_tc2_tc1(ins_bits);
-		if (res == NULL) {
+		if (!res) {
 			*err_code = -1;
 			return NULL;
 		}

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2015 - pancake */
+/* radare - LGPL - Copyright 2007-2016 - pancake */
 /* dietline is a lightweight and portable library similar to GNU readline */
 
 #include <r_cons.h>
@@ -22,7 +22,9 @@ static char *r_line_nullstr = "";
 
 #if ONLY_VALID_CHARS
 static inline int is_valid_char (unsigned char ch) {
-	if (ch>=32 && ch<=127) return true;
+	if (ch >= 32 && ch <= 127) {
+		return true;
+	}
 	switch (ch) {
 	//case 0: // wat
 	case 1: // ^a
@@ -44,21 +46,23 @@ static inline int is_valid_char (unsigned char ch) {
 
 static int inithist() {
 	ZERO_FILL (I.history);
-	if ((I.history.size + 1024) * sizeof(char *) < I.history.size)
+	if ((I.history.size + 1024) * sizeof (char *) < I.history.size) {
 		return false;
-	I.history.data = (char **)malloc ((I.history.size + 1024) * sizeof(char *));
-	if (!I.history.data)
+	}
+	I.history.data = (char **)calloc ((I.history.size + 1024), sizeof(char *));
+	if (!I.history.data) {
 		return false;
+	}
 	I.history.size = R_LINE_HISTSIZE;
-	memset (I.history.data, 0, I.history.size * sizeof(char *));
 	return true;
 }
 
 /* initialize history stuff */
 R_API int r_line_dietline_init() {
 	ZERO_FILL (I.completion);
-	if (!inithist ())
+	if (!inithist ()) {
 		return false;
+	}
 	I.echo = true;
 	return true;
 }
@@ -200,11 +204,14 @@ do_it_again:
 R_API int r_line_hist_add(const char *line) {
 	if (!I.history.data)
 		inithist ();
-	if (I.history.top>=I.history.size)
+	if (I.history.top >= I.history.size)
 		I.history.top = I.history.index = 0; // workaround
 	/* ignore dup */
-	if (I.history.index>0 && !strcmp (line, I.history.data[I.history.index-1]))
-		return false;
+	if (I.history.index > 0) {
+		const char *data = I.history.data[I.history.index - 1];
+		if (data && !strcmp (line, data))
+			return false;
+	}
 	if (line && *line) { // && I.history.index < I.history.size) {
 		I.history.data[I.history.top++] = strdup (line);
 		I.history.index = I.history.top;
@@ -235,7 +242,7 @@ static int r_line_hist_down() {
 	if (I.history.index<I.history.size
 	    && I.history.data[I.history.index]) {
 		I.history.index++;
-		if (I.history.data[I.history.index] == NULL) {
+		if (!I.history.data[I.history.index]) {
 			I.buffer.data[0]='\0';
 			I.buffer.index = I.buffer.length = 0;
 			return 0;
@@ -276,8 +283,7 @@ R_API void r_line_hist_free() {
 		free (I.history.data[i]);
 		I.history.data[i] = NULL;
 	}
-	free (I.history.data);
-	I.history.data = NULL;
+	R_FREE (I.history.data);
 	I.history.index = 0;
 }
 
@@ -286,7 +292,7 @@ R_API int r_line_hist_load(const char *file) {
 	FILE *fd;
 	char buf[R_LINE_BUFSIZE],
 		*path = r_str_home (file);
-	if (path == NULL)
+	if (!path)
 		return false;
 	if (!(fd = fopen (path, "r"))) {
 		free (path);
@@ -337,7 +343,7 @@ R_API void r_line_autocomplete() {
 	int argc = 0;
 	char *p;
 	const char **argv = NULL;
-	int i, j, opt, plen, len = 0;
+	int i, j, opt = 0, plen, len = 0;
 	int cols = r_cons_get_size (NULL)*0.82;
 
 	/* prepare argc and argv */
@@ -345,11 +351,12 @@ R_API void r_line_autocomplete() {
 		I.completion.run (&I);
 		opt = argc = I.completion.argc;
 		argv = I.completion.argv;
-	} else opt = 0;
+	}
 
-	p = (char *)r_str_lchr (I.buffer.data, ' ');
-	if (!p)
-		p = (char *)r_str_lchr (I.buffer.data, '@'); // HACK FOR r2
+	p = (char *)r_sub_str_lchr (I.buffer.data, 0, I.buffer.index, ' ');
+	if (!p) {
+		p = (char *)r_sub_str_lchr (I.buffer.data, 0, I.buffer.index, '@'); // HACK FOR r2
+	}
 	if (p) {
 		p++;
 		plen = sizeof (I.buffer.data)-(int)(size_t)(p-I.buffer.data);
@@ -358,58 +365,79 @@ R_API void r_line_autocomplete() {
 		plen = sizeof (I.buffer.data);
 	}
 	/* autocomplete */
-	if (argc==1) {
-		int largv0 = strlen (argv[0]);
-		if (largv0+3 < plen) {
+	if (argc == 1) {
+		const char *end_word = r_sub_str_rchr(I.buffer.data,
+			I.buffer.index, strlen(I.buffer.data), ' ');
+		const char *t = end_word != NULL ?
+			end_word : I.buffer.data + I.buffer.index;
+		int largv0 = strlen (argv[0]? argv[0]: "");
+		size_t len_t = strlen (t);
+
+		if ((p - I.buffer.data) + largv0 + 1 + len_t < plen) {
+			if (len_t > 0) {
+				int tt = largv0;
+				if (*t != ' ') p[tt++] = ' ';
+				memmove (p + tt, t, len_t);
+			}
 			memcpy (p, argv[0], largv0);
-			memcpy (p+largv0, " ", 2);
-			I.buffer.length = I.buffer.index = strlen (I.buffer.data);
+			p[largv0] = ' ';
+			if (len_t == 0) p[largv0 + 1] = '\0';
+			I.buffer.length = strlen (I.buffer.data);
+			I.buffer.index = (p - I.buffer.data) + largv0 + 1;
 		}
-	} else
-	if (argc>0) {
+	} else if (argc > 0) {
 		if (*p) {
 			// TODO: avoid overflow
+			const char *t = I.buffer.data + I.buffer.index;
 			const char *root = argv[0];
 			int min_common_len = strlen(root);
+			size_t len_t = strlen (t);
 
 			// try to autocomplete argument
-			for (i=0; i<argc; i++) {
+			for (i = 0; i < argc; i++) {
 				j = 0;
 				if (!argv[i]) break;
-				while (argv[i][j]==root[j] && root[j] != '\0') j++;
-				if (j < min_common_len)
+				while (argv[i][j] == root[j] && root[j] != '\0') j++;
+				if (j < min_common_len) {
 					min_common_len = j;
+				}
 				root = argv[i];
 			}
-			memmove (p, root, strlen (root)+1);
-			if (min_common_len<strlen (root))
-				p[min_common_len] = 0;
-			I.buffer.index = I.buffer.length = strlen (I.buffer.data);
+			if (len_t > 0) {
+				int tt = min_common_len;
+				memmove (p + tt, t, len_t);
+				p[tt + len_t] = '\0';
+			}
+			memmove (p, root, min_common_len);
+			if (len_t == 0) p[min_common_len] = '\0';
+			I.buffer.length = strlen (I.buffer.data);
+			I.buffer.index = (p - I.buffer.data) + min_common_len;
 		}
 	}
 
 	/* show options */
-	if (opt>1 && I.echo) {
+	if (opt > 1 && I.echo) {
 		const int sep = 3;
 		int slen, col = 10;
 		printf ("%s%s\n", I.prompt, I.buffer.data);
-		for (i=0; i<argc && argv[i]; i++) {
+		for (i = 0; i < argc && argv[i]; i++) {
 			int l = strlen (argv[i]);
-			if ((sep+l)>col)
-				col = sep+l;
-			if (col>(cols>>1)) {
-				col = (cols>>1);
+			if (sep + l > col) {
+				col = sep + l;
+			}
+			if (col > (cols >> 1)) {
+				col = (cols >> 1);
 				break;
 			}
 		}
-		for (len=i=0; i<argc && argv[i]; i++) {
-			slen = strlen (argv[i]);
-			len += (slen>col)? (slen+sep): col+sep;
-			if (len+col>cols) {
+		for (len = i = 0; i < argc && argv[i]; i++) {
+			if (len + col > cols) {
 				printf ("\n");
 				len = 0;
 			}
-			printf ("%-*s   ", col-sep, argv[i]);
+			printf ("%-*s   ", col - sep, argv[i]);
+			slen = strlen (argv[i]);
+			len += (slen > col) ? (slen + sep) : (col + sep);
 		}
 		printf ("\n");
 	}
@@ -429,6 +457,8 @@ R_API const char *r_line_readline_cb_win(RLineReadCallback cb, void *user) {
 	int ch, i=0; /* grep completion */
 	int vch=0;
 	char *tmp_ed_cmd, prev = 0;
+	HANDLE hClipBoard;
+	char *clipText;
 
 	I.buffer.index = I.buffer.length = 0;
 	I.buffer.data[0] = '\0';
@@ -590,16 +620,14 @@ R_API const char *r_line_readline_cb_win(RLineReadCallback cb, void *user) {
 			} else I.buffer.index = I.buffer.length;
 			break;
 		case 3: // ^C
-			if (I.echo)
-				eprintf ("^C\n");
+			if (I.echo) eprintf ("^C\n");
 			I.buffer.index = I.buffer.length = 0;
 			*I.buffer.data = '\0';
 			r_cons_singleton()->breaked = true;
 			goto _end;
 		case 4: // ^D
 			if (!I.buffer.data[0]) { /* eof */
-				if (I.echo)
-					printf ("^D\n");
+				if (I.echo) printf ("^D\n");
 				r_cons_set_raw (false);
 				return NULL;
 			}
@@ -628,9 +656,7 @@ R_API const char *r_line_readline_cb_win(RLineReadCallback cb, void *user) {
 			break;
 		case 19: // ^S -- backspace
 			if (gcomp) gcomp--;
-			else {
-				I.buffer.index = I.buffer.index? I.buffer.index-1: 0;
-			}
+			else I.buffer.index = I.buffer.index? I.buffer.index-1: 0;
 			break;
 		case 21: // ^U - cut
 			free (I.clipboard);
@@ -638,6 +664,24 @@ R_API const char *r_line_readline_cb_win(RLineReadCallback cb, void *user) {
 			I.buffer.data[0] = '\0';
 			I.buffer.length = 0;
 			I.buffer.index = 0;
+			break;
+		case 22: // ^V - Paste from windows clipboard
+			if (OpenClipboard (NULL)) {
+				hClipBoard = GetClipboardData(CF_TEXT);
+				if (hClipBoard) {
+					clipText = GlobalLock(hClipBoard);
+					if (clipText) {
+						I.buffer.length += strlen(clipText);
+						if (I.buffer.length < R_LINE_BUFSIZE) {
+							I.buffer.index = I.buffer.length;
+							strcat (I.buffer.data, clipText);
+						} else I.buffer.length -= strlen (I.clipboard);
+
+					}
+					GlobalUnlock(hClipBoard);
+				}
+				CloseClipboard();
+			}
 			break;
 		case 23: // ^W ^w
 			if (I.buffer.index>0) {
@@ -750,7 +794,7 @@ R_API const char *r_line_readline_cb_win(RLineReadCallback cb, void *user) {
 				//	gcomp = 0;
 				if (I.history.data != NULL)
 				for (i=0; i<I.history.size; i++) {
-					if (I.history.data[i] == NULL)
+					if (!I.history.data[i])
 						break;
 					if (strstr (I.history.data[i], I.buffer.data)) {
 						gcomp_line = I.history.data[i];
@@ -801,7 +845,7 @@ _end:
 R_API const char *r_line_readline_cb(RLineReadCallback cb, void *user) {
 #if __WINDOWS__ && !__CYGWIN__
  #if 1          // new implementation for read input at windows by skuater. If something fail set this to 0
-    return r_line_readline_cb_win(cb,user);
+	return r_line_readline_cb_win(cb,user);
  #endif
 #endif
 	int columns = r_cons_get_size (NULL)-2;
@@ -840,21 +884,7 @@ R_API const char *r_line_readline_cb(RLineReadCallback cb, void *user) {
 	}
 	r_cons_singleton()->breaked = false;
 	for (;;) {
-#if 0
-		if (I.echo) {
-			printf("  (");
-			for(i=1;i<argc;i++) {
-				if (I.buffer.length==0||!strncmp(argv[i], I.buffer.data, I.buffer.length)) {
-					len+=strlen(argv[i])+1;
-					if (len+I.buffer.length+4 >= columns) break;
-					printf("%s ", argv[i]);
-				}
-			}
-			printf(")");
-			fflush(stdout);
-		}
-#endif
-		I.buffer.data[I.buffer.length]='\0';
+		I.buffer.data[I.buffer.length] = '\0';
 		if (cb && !cb (user, I.buffer.data)) {
 			I.buffer.data[0] = 0;
 			I.buffer.length = 0;
@@ -871,20 +901,22 @@ R_API const char *r_line_readline_cb(RLineReadCallback cb, void *user) {
 		if (ch == -1) return NULL;
 		buf[0] = ch;
 #endif
-		if (I.echo)
+		if (I.echo) {
 			r_cons_clear_line (0);
-		if (columns<1)
+		}
+		if (columns < 1) {
 			columns = 40;
+		}
 #if __WINDOWS__ && !__CYGWIN__
-		if (I.echo)
+		if (I.echo) {
 			printf ("\r%*c\r", columns, ' ');
+		}
 #else
-		if (I.echo)
+		if (I.echo) {
 			printf ("\r\x1b[2K\r"); //%*c\r", columns, ' ');
+		}
 #endif
 		switch (*buf) {
-		//case -1: // ^D
-		//	return NULL;
 		case 0: // control-space
 			/* ignore atm */
 			break;
@@ -1190,23 +1222,23 @@ R_API const char *r_line_readline_cb(RLineReadCallback cb, void *user) {
 		case 8:
 		case 127:
 			if (I.buffer.index < I.buffer.length) {
-				if (I.buffer.index>0) {
+				if (I.buffer.index > 0) {
 					int len = 0;
 					// TODO: WIP
 #if USE_UTF8
 					char *s;
 					do {
 						I.buffer.index--;
-						s = I.buffer.data+I.buffer.index;
+						s = I.buffer.data + I.buffer.index;
 						len++;
-					} while ((*s &0xc0)==0x80);
+					} while ((*s & 0xc0) == 0x80);
 #else
 					len = 1;
 					I.buffer.index--;
 #endif
-					memmove (I.buffer.data+I.buffer.index,
-						I.buffer.data+I.buffer.index+len,
-						strlen (I.buffer.data+I.buffer.index));
+					memmove (I.buffer.data + I.buffer.index,
+						I.buffer.data + I.buffer.index + len,
+						strlen (I.buffer.data + I.buffer.index));
 					I.buffer.length -= len;
 					I.buffer.data[I.buffer.length] = 0;
 				}
@@ -1217,18 +1249,20 @@ R_API const char *r_line_readline_cb(RLineReadCallback cb, void *user) {
 				// utf8 backward size
 				do {
 					I.buffer.length--;
-					s = I.buffer.data+I.buffer.length;
+					s = I.buffer.data + I.buffer.length;
 					i++;
-				} while ((*s &0xc0)==0x80);
+				} while ((*s & 0xc0) == 0x80);
 				I.buffer.index = I.buffer.length;
 #else
-				I.buffer.index = --I.buffer.length;
+				if (I.buffer.index > 0) {
+					I.buffer.index = --I.buffer.length;
+				}
 #endif
-				if (I.buffer.length<0) I.buffer.length=0;
-				I.buffer.data[I.buffer.length]='\0';
+				I.buffer.data[I.buffer.length] = '\0';
 			}
-			if (I.buffer.index<0)
+			if (I.buffer.index < 0) {
 				I.buffer.index = 0;
+			}
 			break;
 		case 9: // tab
 			r_line_autocomplete ();
@@ -1236,23 +1270,11 @@ R_API const char *r_line_readline_cb(RLineReadCallback cb, void *user) {
 		case 13:
 			if (gcomp && I.buffer.length>0) {
 				strncpy (I.buffer.data, gcomp_line, R_LINE_BUFSIZE-1);
-                I.buffer.data[R_LINE_BUFSIZE-1] = '\0';
+				I.buffer.data[R_LINE_BUFSIZE-1] = '\0';
 				I.buffer.length = strlen (gcomp_line);
 			}
 			gcomp_idx = gcomp = 0;
 			goto _end;
-#if 0
-			// force command fit
-			for(i=1;i<argc;i++) {
-				if (I.buffer.length==0 || !strncmp(argv[i], I.buffer.data, I.buffer.length)) {
-					printf("%*c", columns, ' ');
-					printf("\r");
-					printf("\n\n(%s)\n\n", I.buffer.data);
-					r_cons_set_raw(0);
-					return I.buffer.data;
-				}
-			}
-#endif
 		default:
 			if (gcomp)
 				gcomp++;
@@ -1260,28 +1282,31 @@ R_API const char *r_line_readline_cb(RLineReadCallback cb, void *user) {
 #if USE_UTF8
 				if ((I.buffer.length + utflen) < sizeof (I.buffer.data)) {
 					I.buffer.length += utflen;
-					for (i = I.buffer.length; i>I.buffer.index; i--)
-						I.buffer.data[i] = I.buffer.data[i-utflen];
-					memcpy (I.buffer.data+I.buffer.index, buf, utflen);
+					for (i = I.buffer.length; i > I.buffer.index; i--) {
+						I.buffer.data[i] = I.buffer.data[i - utflen];
+					}
+					memcpy (I.buffer.data + I.buffer.index, buf, utflen);
 				}
 #else
-				for (i = ++I.buffer.length; i>I.buffer.index; i--)
-					I.buffer.data[i] = I.buffer.data[i-1];
+				for (i = ++I.buffer.length; i > I.buffer.index; i--) {
+					I.buffer.data[i] = I.buffer.data[i - 1];
+				}
 				I.buffer.data[I.buffer.index] = buf[0];
 #endif
 			} else {
 #if USE_UTF8
 				if ((I.buffer.length + utflen) < sizeof (I.buffer.data)) {
-					memcpy (I.buffer.data+I.buffer.length, buf, utflen);
-					I.buffer.length+=utflen;
+					memcpy (I.buffer.data + I.buffer.length, buf, utflen);
+					I.buffer.length += utflen;
 				}
-				I.buffer.data[I.buffer.length]='\0';
+				I.buffer.data[I.buffer.length] = '\0';
 #else
-				I.buffer.data[I.buffer.length]=buf[0];
+				I.buffer.data[I.buffer.length] = buf[0];
 				I.buffer.length++;
-				if (I.buffer.length>(R_LINE_BUFSIZE-1))
+				if (I.buffer.length > (R_LINE_BUFSIZE - 1)) {
 					I.buffer.length--;
-				I.buffer.data[I.buffer.length]='\0';
+				}
+				I.buffer.data[I.buffer.length] = '\0';
 #endif
 			}
 #if USE_UTF8
@@ -1295,11 +1320,9 @@ R_API const char *r_line_readline_cb(RLineReadCallback cb, void *user) {
 		if (I.echo) {
 			if (gcomp) {
 				gcomp_line = "";
-				//if (I.buffer.length == 0)
-				//	gcomp = 0;
 				if (I.history.data != NULL)
 				for (i=0; i<I.history.size; i++) {
-					if (I.history.data[i] == NULL)
+					if (!I.history.data[i])
 						break;
 					if (strstr (I.history.data[i], I.buffer.data)) {
 						gcomp_line = I.history.data[i];
